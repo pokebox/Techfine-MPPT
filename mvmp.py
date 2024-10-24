@@ -229,7 +229,7 @@ class mvmp:
             "pvInputVoltage": status['pvInputVoltage'],
             "batteryVoltage": status['batteryVoltage']/10.0,
             "chargingCurrent": chargeCurrent,
-            "chargingPower": status['batteryVoltage']/10.0*chargeCurrent,
+            "chargingPower": round(status['batteryVoltage']/10.0*chargeCurrent, 3),
             "batteryCapacity": status['batteryCapacity'],
             "batteryCells": status['batteryCells'],
             "loadPercentage": status['loadPercentage'],

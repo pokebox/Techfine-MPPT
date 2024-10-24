@@ -6,6 +6,7 @@ import traceback
 import logging
 import struct
 from datetime import datetime
+import requests
 
 class mvmp:
     def __init__(self) -> None:
@@ -13,6 +14,24 @@ class mvmp:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.timeoutSleep = 0.1    # 超时等待休眠时间
         self.timeoutCountMax = 10  # 超时等待次数
+
+    def send_sensor_data(self, sensor_name: str, sensor_value, data: dict, sensor_type: str = "sensor"):
+        url = f"https://<HASS_IP>:<HASS_PORT>/api/states/{sensor_type}.{sensor_name}"
+        headers = {
+            "Authorization": "Bearer <API_TOKEN>",
+            "Content-Type": "application/json",
+        }
+        datas = {
+            "state": sensor_value,
+            "attributes": data
+        }
+        # 发送 POST 请求
+        response = requests.post(url, headers=headers, json=datas)
+        
+        if response.status_code == 200:
+            logger.debug(f"Successfully updated sensor: {sensor_value}")
+        else:
+            logger.warning(f"Failed to update sensor: {response.status_code} - {response.text}")
 
     def connect(self, port, baudrate=2400, timeout=1):
         self.serial = serial.Serial(port, baudrate, timeout=timeout)
@@ -266,6 +285,20 @@ class mvmp:
             "芯片温度": f"{outStatus['chipTemperature']}°C",
             "电池温度": f"{outStatus['batteryTemperature']}°C"
         }
+        self.send_sensor_data("mppt_pvInputVoltage", outStatus['pvInputVoltage'], {"device_class": "voltage", "unit_of_measurement": "V", "friendly_name": "光伏输入电压"})
+        self.send_sensor_data("mppt_batteryVoltage", outStatus['batteryVoltage'], {"device_class": "voltage", "unit_of_measurement": "V", "friendly_name": "电池电压"})
+        self.send_sensor_data("mppt_chargingCurrent", chargeCurrent, {"device_class": "current", "unit_of_measurement": "A", "friendly_name": "充电电流"})
+        self.send_sensor_data("mppt_chargingPower", outStatus['chargingPower'], {"device_class": "power", "unit_of_measurement": "W", "friendly_name": "计算充电功率"})
+        self.send_sensor_data("mppt_batteryCapacity", outStatus['batteryCapacity'], {"device_class": "battery", "unit_of_measurement": "Ah", "friendly_name": "电池容量"})
+        self.send_sensor_data("mppt_batteryCells", outStatus['batteryCells'], {"device_class": "value", "unit_of_measurement": "cells", "friendly_name": "电池节数"})
+        # self.send_sensor_data("mppt_loadPercentage", outStatus['loadPercentage'], {"device_class": "battery", "unit_of_measurement": "%", "friendly_name": "负载百分比"})
+        self.send_sensor_data("mppt_dailyGeneratedEnergy", dailyGeneratedEnergy, {"device_class": "energy", "unit_of_measurement": "kWh", "friendly_name": "日发电量", "state_class": "total"})
+        self.send_sensor_data("mppt_totalGeneratedEnergy", totalGeneratedEnergy, {"device_class": "energy", "unit_of_measurement": "kWh", "friendly_name": "总发电量", "state_class": "total_increasing"})
+        self.send_sensor_data("mppt_systemRunTime", systemRunTime, {"device_class": "value", "unit_of_measurement": "h", "friendly_name": "系统运行时间"})
+        self.send_sensor_data("mppt_programVersion", programVersion, {"device_class": "version", "unit_of_measurement": "", "friendly_name": "程序版本"})
+        self.send_sensor_data("mppt_machineTemperature", outStatus['machineTemperature'], {"device_class": "temperature", "unit_of_measurement": "°C", "friendly_name": "机器温度"})
+        if outStatus['batteryTemperature'] is not None:
+            self.send_sensor_data("mppt_batteryTemperature", outStatus['batteryTemperature'], {"device_class": "temperature", "unit_of_measurement": "°C", "friendly_name": "电池温度"})
 
         return outCNStatus
 
@@ -312,6 +345,10 @@ if __name__ == '__main__':
             status = m.parseData(data)
             if status:
                 logger.info(f"{json.dumps(status, indent=4, ensure_ascii=False)},")
-        time.sleep(1)
+        # 如果是晚上就延长等待时间
+        if datetime.now().hour >= 20 or datetime.now().hour < 6:
+            time.sleep(30)
+        else:
+            time.sleep(1)
     
     m.serial.close()
